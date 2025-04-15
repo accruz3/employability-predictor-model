@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import joblib
 import numpy as np
-from typing import List
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load the model and scaler
 model = joblib.load('svr_model.pkl')
@@ -10,6 +10,14 @@ scaler = joblib.load('scaler.pkl')
 
 # Initialize the FastAPI app
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can specify your frontend domain if you want to restrict access
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods like GET, POST, etc.
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Define the input data model using Pydantic
 class PredictionRequest(BaseModel):
