@@ -13,13 +13,33 @@ app = FastAPI()
 
 # Define the input data model using Pydantic
 class PredictionRequest(BaseModel):
-    features: List[float]
-
+    PracticumGrade: int
+    WebDevGrade: int
+    DSAGrade: int
+    FundamentalsProgGrade: int
+    OOPGrade: int	
+    FoundationsCSGrade: int	
+    NetworkingGrade: int	
+    NumericComputationGrade: int	
+    ExtracurricularsLevel: int	
+    LatinHonors: int	
+ 
 # Define a route for prediction
 @app.post('/predict')
 def predict(request: PredictionRequest):
     # Extract features from the request
-    features = np.array(request.features).reshape(1, -1)
+    features = np.array([
+        request.PracticumGrade,
+        request.WebDevGrade,
+        request.DSAGrade,
+        request.FundamentalsProgGrade,
+        request.OOPGrade,
+        request.FoundationsCSGrade,
+        request.NetworkingGrade,
+        request.NumericComputationGrade,
+        request.ExtracurricularsLevel,
+        request.LatinHonors
+    ]).reshape(1, -1)
     
     # Scale the features using the loaded scaler
     features_scaled = scaler.transform(features)

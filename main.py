@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 
 def load_and_preprocess_data(file_path):
-    """Load and preprocess the dataset."""
+    """Load and preprocess the dataset with ordinal encoding."""
     df = pd.read_excel(file_path, engine='openpyxl')
     
     # Drop missing values
@@ -15,13 +15,31 @@ def load_and_preprocess_data(file_path):
     # Identify target column (2nd to last column)
     cols = df.columns
     target_column = cols[-1]
-    
+        
     # Features (X) and target (y)
     X = df.drop(target_column, axis=1)
     y = df[target_column]
     
-    # Convert categorical features to dummy variables (one-hot encoding)
-    X = pd.get_dummies(X)
+    # Define ordinal mapping
+    ordinal_mapping = {
+        "below average (2.75 - 5)": 1,
+        "average (1.75 - 2.5)": 2,
+        "above average (1.0 - 1.5)": 3,
+        "low": 0,
+        "moderate": 1,
+        "high": 2,
+        "yes": 1,
+        "no": 0
+    }
+    
+    # Apply ordinal encoding to categorical columns
+    for col in X.columns:
+        if X[col].dtype == object:
+            X[col] = X[col].str.lower().map(ordinal_mapping)
+    
+    # Drop any rows with unmapped categories (if any)
+    X = X.dropna()
+    y = y.loc[X.index]  # Keep y aligned with X
     
     # Scale the features
     scaler = StandardScaler()
