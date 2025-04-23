@@ -1,7 +1,7 @@
 import pandas as pd
 import joblib
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVR
+from sklearn.svm import SVC, SVR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 
@@ -14,12 +14,14 @@ def load_and_preprocess_data(file_path):
     
     # Identify target column (2nd to last column)
     cols = df.columns
-    target_column = cols[-1]
+    target_column_1 = cols[-2] # time to employment
+    target_column_2 = cols[-1] # job title
         
     # Features (X) and target (y)
-    X = df.drop(target_column, axis=1)
-    y = df[target_column]
-    
+    X = df.drop([target_column_1, target_column_2], axis=1)
+    y1 = df[target_column_1]
+    y2 = df[target_column_2]
+
     # Define ordinal mapping
     ordinal_mapping = {
         "below average (2.75 - 5)": 1,
@@ -39,49 +41,62 @@ def load_and_preprocess_data(file_path):
     
     # Drop any rows with unmapped categories (if any)
     X = X.dropna()
-    y = y.loc[X.index]  # Keep y aligned with X
+    y1 = y1.loc[X.index]  # Keep y aligned with X
+    y2 = y2.loc[X.index]
     
     # Scale the features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    return X_scaled, y, scaler
+    return X_scaled, y1, y2, scaler
 
-def train_svr_model(X_train, y_train):
-    """Train the SVR model."""
-    model = SVR()
-    model.fit(X_train, y_train)
-    return model
+def train_models(X_train, y1_train, y2_train):
+    """Train separate models for time to employment (SVR) and job title (SVC)."""
+    # Train SVR model for target 1 (Time to employment)
+    svr_model = SVR()
+    svr_model.fit(X_train, y1_train)
 
-def evaluate_model(model, X_test, y_test):
-    """Evaluate the model and print the metrics."""
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
+    # Train SVM model for target 2 (Job title classification)
+    svm_model = SVC()
+    svm_model.fit(X_train, y2_train)
     
-    print("MSE:", mse)
-    print("R² Score:", r2)
+    return svr_model, svm_model
 
-def save_model(model, scaler, model_filename='svr_model.pkl', scaler_filename='scaler.pkl'):
-    """Save the trained model and scaler to disk."""
-    joblib.dump(model, model_filename)
+def evaluate_models(svr_model, svm_model, X_test, y1_test, y2_test):
+    """Evaluate both models and print metrics."""
+    # Evaluate SVR model (Time to employment)
+    y1_pred = svr_model.predict(X_test)
+    mse = mean_squared_error(y1_test, y1_pred)
+    r2 = r2_score(y1_test, y1_pred)
+    print("SVR Model - MSE:", mse)
+    print("SVR Model - R² Score:", r2)
+
+    # Evaluate SVM model (Job title)
+    y2_pred = svm_model.predict(X_test)
+    accuracy = (y2_pred == y2_test).mean()  # Classification accuracy
+    print("SVM Model - Accuracy:", accuracy)
+
+def save_models(svr_model, svm_model, scaler, svr_filename='svr_model.pkl', svm_filename='svm_model.pkl', scaler_filename='scaler.pkl'):
+    """Save the trained models and scaler to disk."""
+    joblib.dump(svr_model, svr_filename)
+    joblib.dump(svm_model, svm_filename)
     joblib.dump(scaler, scaler_filename)
 
 def main():
     # Load and preprocess the data
-    X_scaled, y, scaler = load_and_preprocess_data('dataset.xlsx')
+    X_scaled, y1, y2, scaler = load_and_preprocess_data('dataset.xlsx')
     
     # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    X_train, X_test, y1_train, y1_test, y2_train, y2_test = train_test_split(X_scaled, y1, y2, test_size=0.2, random_state=42)
     
-    # Train SVR model
-    model = train_svr_model(X_train, y_train)
+    # Train the models
+    svr_model, svm_model = train_models(X_train, y1_train, y2_train)
     
-    # Evaluate the model
-    evaluate_model(model, X_test, y_test)
+    # Evaluate the models
+    evaluate_models(svr_model, svm_model, X_test, y1_test, y2_test)
     
-    # Save the trained model and scaler
-    save_model(model, scaler)
+    # Save the models and scaler
+    save_models(svr_model, svm_model, scaler)
 
 if __name__ == '__main__':
     main()

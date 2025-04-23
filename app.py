@@ -4,8 +4,9 @@ import joblib
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load the model and scaler
-model = joblib.load('svr_model.pkl')
+# Load the trained models and scaler
+svr_model = joblib.load('svr_model.pkl')
+svm_model = joblib.load('svm_model.pkl')
 scaler = joblib.load('scaler.pkl')
 
 # Initialize the FastAPI app
@@ -13,10 +14,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can specify your frontend domain if you want to restrict access
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods like GET, POST, etc.
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Define the input data model using Pydantic
@@ -52,8 +53,14 @@ def predict(request: PredictionRequest):
     # Scale the features using the loaded scaler
     features_scaled = scaler.transform(features)
     
-    # Predict using the trained model
-    prediction = model.predict(features_scaled)
+    # Predict time to employment (SVR model)
+    time_to_employment = svr_model.predict(features_scaled)[0]
     
-    # Return the prediction as a JSON response
-    return {'prediction': prediction[0]}
+    # Predict job title (SVM model)
+    job_title = svm_model.predict(features_scaled)[0]
+    
+    # Return both predictions
+    return {
+        'predicted_time_to_employment': time_to_employment,
+        'predicted_job_title': job_title
+    }
