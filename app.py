@@ -4,12 +4,11 @@ import joblib
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load the trained models and scaler
 svr_model = joblib.load('svr_model.pkl')
 svm_model = joblib.load('svm_model.pkl')
 scaler = joblib.load('scaler.pkl')
+label_encoder = joblib.load('label_encoder.pkl')
 
-# Initialize the FastAPI app
 app = FastAPI()
 
 app.add_middleware(
@@ -20,7 +19,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define the input data model using Pydantic
 class PredictionRequest(BaseModel):
     PracticumGrade: int
     WebDevGrade: int
@@ -33,10 +31,8 @@ class PredictionRequest(BaseModel):
     ExtracurricularsLevel: int	
     LatinHonors: int	
  
-# Define a route for prediction
 @app.post('/predict')
 def predict(request: PredictionRequest):
-    # Extract features from the request
     features = np.array([
         request.PracticumGrade,
         request.WebDevGrade,
@@ -50,16 +46,13 @@ def predict(request: PredictionRequest):
         request.LatinHonors
     ]).reshape(1, -1)
     
-    # Scale the features using the loaded scaler
     features_scaled = scaler.transform(features)
     
-    # Predict time to employment (SVR model)
     time_to_employment = svr_model.predict(features_scaled)[0]
     
-    # Predict job title (SVM model)
-    job_title = svm_model.predict(features_scaled)[0]
+    job_title_encoded = svm_model.predict(features_scaled)[0]
+    job_title = label_encoder.inverse_transform([job_title_encoded])[0]
     
-    # Return both predictions
     return {
         'predicted_time_to_employment': time_to_employment,
         'predicted_job_title': job_title
