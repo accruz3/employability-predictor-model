@@ -1,4 +1,5 @@
 # from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import itertools
@@ -9,20 +10,20 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC, SVR
 from sklearn.model_selection import LeaveOneOut, StratifiedKFold, train_test_split
-# from sklearn.model_selection import train_test_split, StratifiedKFold, RepeatedStratifiedKFold
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error
-# from sklearn.metrics import confusion_matrix, r2_score
-# from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split, StratifiedKFold, RepeatedStratifiedKFold
+from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, mean_squared_error
+from sklearn.metrics import confusion_matrix, r2_score
+from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import LabelEncoder
-# from imblearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline
 from imblearn.over_sampling import ADASYN
-# from imblearn.over_sampling import SMOTE, RandomOverSampler, SVMSMOTE, BorderlineSMOTE
+from imblearn.over_sampling import SMOTE, RandomOverSampler, SVMSMOTE, BorderlineSMOTE
 from sklearn.multiclass import OneVsRestClassifier
-# from imblearn.under_sampling import RandomUnderSampler, NearMiss, ClusterCentroids
-# from sklearn.feature_selection import RFE, SelectKBest, f_classif
-# from xgboost import XGBClassifier
-# from collections import Counter
-# from imblearn.combine import SMOTETomek, SMOTEENN
+from imblearn.under_sampling import RandomUnderSampler, NearMiss, ClusterCentroids
+from sklearn.feature_selection import RFE, SelectKBest, f_classif
+from xgboost import XGBClassifier
+from collections import Counter
+from imblearn.combine import SMOTETomek, SMOTEENN
 
 def load_and_preprocess_data(file_path):
     df = pd.read_excel(file_path, engine='openpyxl')
@@ -222,7 +223,7 @@ def load_and_preprocess_data(file_path):
     '''
     export models
     '''
-    final_svm_model = SVC(C=best_params['C'], gamma=best_params['gamma'], kernel='rbf')
+    final_svm_model = OneVsRestClassifier(SVC(C=best_params['C'], gamma=best_params['gamma'], kernel='rbf', class_weight='balanced'))
     final_svm_model.fit(X_scaled, y_encoded)
 
     final_svr_model = SVR(C=best_reg_params['C'], epsilon=best_reg_params['epsilon'], kernel='rbf')
