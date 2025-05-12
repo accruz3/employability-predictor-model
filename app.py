@@ -33,20 +33,15 @@ class PredictionRequest(BaseModel):
  
 @app.post('/predict')
 def predict(request: PredictionRequest):
-    features = np.array([
-        request.PracticumGrade,
+    model_input = np.array([
         request.WebDevGrade,
-        request.DSAGrade,
-        request.FundamentalsProgGrade,
-        request.OOPGrade,
+        request.FundamentalsProgGrade, 
         request.FoundationsCSGrade,
-        request.NetworkingGrade,
-        request.NumericComputationGrade,
         request.ExtracurricularsLevel,
         request.LatinHonors
     ]).reshape(1, -1)
-    
-    features_scaled = scaler.transform(features)
+
+    features_scaled = scaler.transform(model_input)
     
     time_to_employment = svr_model.predict(features_scaled)[0]
     

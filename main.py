@@ -4,11 +4,12 @@ import pandas as pd
 import itertools
 import joblib
 # import seaborn as sns
+from sklearn.dummy import DummyClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC, SVR
-from sklearn.model_selection import StratifiedKFold, LeaveOneOut
-# from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold
+from sklearn.model_selection import LeaveOneOut, StratifiedKFold, train_test_split
+# from sklearn.model_selection import train_test_split, StratifiedKFold, RepeatedStratifiedKFold
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error
 # from sklearn.metrics import confusion_matrix, r2_score
 # from sklearn.model_selection import GridSearchCV
@@ -80,9 +81,10 @@ def load_and_preprocess_data(file_path):
     df['NumericComputationStrength'] = df['NumericComputationGrade'] - df['OverallGrade']
 
     # identifying columns
-    X = df[['PracticumGrade','WebDevGrade','DSAGrade','FundamentalsProgGrade','OOPGrade','FoundationsCSGrade','NetworkingGrade','NumericComputationGrade','ExtracurricularsLevel','LatinHonors']]
+    # X = df[['PracticumGrade','WebDevGrade','DSAGrade','FundamentalsProgGrade','OOPGrade','FoundationsCSGrade','NetworkingGrade','NumericComputationGrade','ExtracurricularsLevel','LatinHonors']]
     # X = df[['WebDevStrength', 'DSAStrength', 'FundamentalsProgStrength', 'OOPStrength', 'FoundationsCSStrength', 'NetworkingStrength', 'NumericComputationStrength', 'ExtracurricularsLevel', 'LatinHonors']]
     # X = df[['OverallGrade', 'ExtracurricularsLevel', 'LatinHonors']]
+    X = df[['WebDevGrade', 'FundamentalsProgGrade','FoundationsCSGrade', 'ExtracurricularsLevel', 'LatinHonors']] # based on select K-Best
     y = df['CategorizedJobTitle']
 
     label_encoder = LabelEncoder()
@@ -92,13 +94,23 @@ def load_and_preprocess_data(file_path):
     sc_X = StandardScaler()
     X_scaled = sc_X.fit_transform(X)
 
+    # dataset split
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
+    
+    # dummy classifier (baseline model)
+    dummy = DummyClassifier(strategy='most_frequent')
+    dummy.fit(X_train, y_train)
+    y_dummy = dummy.predict(X_test)
+    dummy_f1 = f1_score(y_test, y_dummy, average='weighted')
+    print(f"Dummy F1: {dummy_f1:.4f}\n")
+
     '''
     CLASSIFICATION PROBLEM (JOB TITLES)
     '''
     # param grid for hyperparameter tuning
     param_grid = {
-        'C': [0.1, 1, 10, 100, 1000],
-        'gamma': [1, 0.1, 0.01, 0.001, 0.0001]
+        'C': [2**-5, 2**-3, 2**-1, 2, 2**3, 2**5, 2**7],
+        'gamma': [2**-15, 2**-13, 2**-11, 2**-9, 2**-7, 2**-5, 2**-3, 2, 2**1, 2**3]
     }
 
     param_combinations = list(itertools.product(param_grid['C'], param_grid['gamma']))
@@ -106,34 +118,45 @@ def load_and_preprocess_data(file_path):
     best_score = 0
     best_params = None
     
-    skf = StratifiedKFold(n_splits=4, shuffle=True, random_state=42)
-    adasyn = ADASYN(sampling_strategy='auto', random_state=42, n_neighbors=2)
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    adasyn = ADASYN(sampling_strategy='auto', random_state=42, n_neighbors=3)
 
     for C, gamma in param_combinations:
-        loo = LeaveOneOut()
         accuracies, weighted_f1s, weighted_precisions, weighted_recalls = [], [], [], []
+        train_accuracies, train_f1s = [], []
 
-        for train_index, test_index in skf.split(X_scaled, y_encoded):
-            X_train, X_test = X_scaled[train_index], X_scaled[test_index]
-            y_train, y_test = y_encoded[train_index], y_encoded[test_index]
+        for train_index, test_index in skf.split(X_train, y_train):
+            X_train_fold, X_test_fold = X_train[train_index], X_train[test_index]
+            y_train_fold, y_test_fold = y_train[train_index], y_train[test_index]
 
-            X_train_resampled, y_train_resampled = adasyn.fit_resample(X_train, y_train)
+            X_train_resampled, y_train_resampled = adasyn.fit_resample(X_train_fold, y_train_fold)
             
             model = OneVsRestClassifier(SVC(C=C, gamma=gamma, kernel='rbf', class_weight='balanced'))
             model.fit(X_train_resampled, y_train_resampled)
-            y_pred = model.predict(X_test)
             
-            accuracies.append(accuracy_score(y_test, y_pred))
-            weighted_f1s.append(f1_score(y_test, y_pred, average='weighted'))
-            weighted_precisions.append(precision_score(y_test, y_pred, average='weighted', zero_division=0))
-            weighted_recalls.append(recall_score(y_test, y_pred, average='weighted', zero_division=0))
+            # predict test
+            y_pred = model.predict(X_test_fold) 
+
+            accuracies.append(accuracy_score(y_test_fold, y_pred))
+            weighted_f1s.append(f1_score(y_test_fold, y_pred, average='weighted'))
+            weighted_precisions.append(precision_score(y_test_fold, y_pred, average='weighted', zero_division=0))
+            weighted_recalls.append(recall_score(y_test_fold, y_pred, average='weighted', zero_division=0))
+
+            # predict training
+            y_train_pred = model.predict(X_train_resampled)
+            train_f1 = f1_score(y_train_resampled, y_train_pred, average='weighted')
+            train_accuracy = accuracy_score(y_train_resampled, y_train_pred)
+
+            train_accuracies.append(train_accuracy)
+            train_f1s.append(train_f1)
 
         avg_accuracy = np.mean(accuracies)
         avg_f1 = np.mean(weighted_f1s)
         avg_precision = np.mean(weighted_precisions)
         avg_recall = np.mean(weighted_recalls)
+        avg_train_accuracy = np.mean(train_accuracies)
+        avg_train_f1 = np.mean(train_f1s)
 
-        
         print(f"Params: C={C}, gamma={gamma} --> "
             f"Accuracy: {avg_accuracy:.4f}, "
             f"Weighted F1: {avg_f1:.4f}, "
@@ -145,12 +168,16 @@ def load_and_preprocess_data(file_path):
             best_score = avg_f1
             best_precision = avg_precision
             best_recall = avg_recall
+            best_train_acc = avg_train_accuracy
+            best_train_f1 = avg_train_f1
             best_params = {'C': C, 'gamma': gamma}
 
     print("\nBest SVM configuration found:")
-    print(best_params)
-    print(f"Best F1 Score: {best_score:.4f} | Accuracy: {best_accuracy:.4f} | Precision: {best_precision:.4f} | Recall: {best_recall:.4f}")
-    
+    print(best_params, "\n")
+    print(f"Train Accuracy: {best_train_acc:.4f}, Train F1: {best_train_f1:.4f}")
+    print(f"Test Accuracy: {best_accuracy:.4f}, F1 Score: {best_score:.4f}, Precision: {best_precision:.4f}, Recall: {best_recall:.4f}")
+    print(f"Performance Increase over Baseline Model: {((best_score-dummy_f1)/dummy_f1) * 100:.4f}%\n")
+
     '''
     REGRESSION PROBLEM (TIME TO EMPLOYMENT)
     '''
