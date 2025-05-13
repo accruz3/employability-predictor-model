@@ -53,7 +53,12 @@ def predict(request: PredictionRequest):
         request.WebDevGrade, 
         request.DSAGrade,
         request.FundamentalsProgGrade,
-        request.OOPGrade
+        request.OOPGrade,
+        request.FoundationsCSGrade,
+        request.NetworkingGrade, 
+        request.NumericComputationGrade,
+        request.ExtracurricularsLevel,
+        request.LatinHonors
     ]).reshape(1, -1)
 
     features_scaled_reg = scaler_reg.transform(model_input_reg)

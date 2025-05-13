@@ -180,22 +180,14 @@ def load_and_preprocess_data(file_path):
     '''
     REGRESSION PROBLEM (TIME TO EMPLOYMENT)
     '''
-    X = df[['PracticumGrade', 'WebDevGrade','DSAGrade', 'FundamentalsProgGrade', 'OOPGrade']] # based on select K-Best
+    X = df[['PracticumGrade','WebDevGrade','DSAGrade','FundamentalsProgGrade','OOPGrade','FoundationsCSGrade','NetworkingGrade','NumericComputationGrade','ExtracurricularsLevel','LatinHonors']]
 
     # feature scaling
     sc_X_reg = StandardScaler()
     X_scaled = sc_X_reg.fit_transform(X)
 
-    # use IQR to identify outliers
-    Q1 = df['TimeToEmployment'].quantile(0.25)
-    Q3 = df['TimeToEmployment'].quantile(0.75)
-    IQR = Q3 - Q1
-
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-
-    # mask for non-outliers
-    mask = (df['TimeToEmployment'] >= lower_bound) & (df['TimeToEmployment'] <= upper_bound)
+    # mask to remove outliers
+    mask = (df['TimeToEmployment'] <= 11)
 
     # apply mask 
     X_filtered = X_scaled[mask]
@@ -253,7 +245,7 @@ def load_and_preprocess_data(file_path):
     print(f"Dummy Regressor MSE: {mse_dummy_all:.4f}")
     print(f"Train MSE: {best_train_reg_score:.4f}")
     print(f"Test MSE: {best_reg_score:.4f}")
-    print(f"Performance Increase over Baseline Model: {((best_reg_score-mse_dummy_all)/mse_dummy_all) * 100:.4f}%\n")
+    print(f"Performance Increase over Baseline Model: {((mse_dummy_all-best_reg_score)/mse_dummy_all) * 100:.4f}%\n")
 
     '''
     export models
@@ -263,6 +255,18 @@ def load_and_preprocess_data(file_path):
 
     final_svr_model = SVR(C=best_reg_params['C'], epsilon=best_reg_params['epsilon'], kernel='rbf')
     final_svr_model.fit(X_filtered, y_reg)
+    y_pred = final_svr_model.predict(X_filtered)  # You can also use X_test if you have a separate test set
+
+    # Plot predicted vs actual values
+    plt.figure(figsize=(8, 6))
+    plt.scatter(y_reg, y_pred, color='blue', label='Predicted vs Actual')
+    plt.plot([min(y_reg), max(y_reg)], [min(y_reg), max(y_reg)], color='red', linestyle='--', label='Ideal Prediction')
+    plt.title('Predicted vs Actual: Time to Employment')
+    plt.xlabel('Actual Time to Employment (Months)')
+    plt.ylabel('Predicted Time to Employment (Months)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
     # save to .pkl
     joblib.dump(final_svr_model, 'svr_model.pkl')
