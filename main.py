@@ -255,18 +255,6 @@ def load_and_preprocess_data(file_path):
 
     final_svr_model = SVR(C=best_reg_params['C'], epsilon=best_reg_params['epsilon'], kernel='rbf')
     final_svr_model.fit(X_filtered, y_reg)
-    y_pred = final_svr_model.predict(X_filtered)  # You can also use X_test if you have a separate test set
-
-    # Plot predicted vs actual values
-    plt.figure(figsize=(8, 6))
-    plt.scatter(y_reg, y_pred, color='blue', label='Predicted vs Actual')
-    plt.plot([min(y_reg), max(y_reg)], [min(y_reg), max(y_reg)], color='red', linestyle='--', label='Ideal Prediction')
-    plt.title('Predicted vs Actual: Time to Employment')
-    plt.xlabel('Actual Time to Employment (Months)')
-    plt.ylabel('Predicted Time to Employment (Months)')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
 
     # save to .pkl
     joblib.dump(final_svr_model, 'svr_model.pkl')
