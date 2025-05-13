@@ -63,7 +63,6 @@ def predict(request: PredictionRequest):
 
     features_scaled_reg = scaler_reg.transform(model_input_reg)
     time_to_employment = svr_model.predict(features_scaled_reg)[0]
-    job_title = label_encoder.inverse_transform([job_title_encoded])[0]
     
     return {
         'predicted_time_to_employment': time_to_employment,

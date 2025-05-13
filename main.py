@@ -184,13 +184,13 @@ def load_and_preprocess_data(file_path):
 
     # feature scaling
     sc_X_reg = StandardScaler()
-    X_scaled = sc_X_reg.fit_transform(X)
+    X_scaled_reg = sc_X_reg.fit_transform(X)
 
     # mask to remove outliers
     mask = (df['TimeToEmployment'] <= 11)
 
     # apply mask 
-    X_filtered = X_scaled[mask]
+    X_filtered = X_scaled_reg[mask]
     y_reg = df['TimeToEmployment'].values[mask]
 
     # dataset split
