@@ -1,15 +1,13 @@
-# from matplotlib import pyplot as plt
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import itertools
 import joblib
-# import seaborn as sns
-from sklearn.dummy import DummyClassifier
+from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC, SVR
-from sklearn.model_selection import LeaveOneOut, StratifiedKFold, train_test_split
+from sklearn.model_selection import KFold, LeaveOneOut, StratifiedKFold, train_test_split
 from sklearn.model_selection import train_test_split, StratifiedKFold, RepeatedStratifiedKFold
 from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, mean_squared_error
 from sklearn.metrics import confusion_matrix, r2_score
@@ -20,7 +18,7 @@ from imblearn.over_sampling import ADASYN
 from imblearn.over_sampling import SMOTE, RandomOverSampler, SVMSMOTE, BorderlineSMOTE
 from sklearn.multiclass import OneVsRestClassifier
 from imblearn.under_sampling import RandomUnderSampler, NearMiss, ClusterCentroids
-from sklearn.feature_selection import RFE, SelectKBest, f_classif
+from sklearn.feature_selection import RFE, SelectKBest, f_classif, f_regression
 from xgboost import XGBClassifier
 from collections import Counter
 from imblearn.combine import SMOTETomek, SMOTEENN
@@ -94,20 +92,13 @@ def load_and_preprocess_data(file_path):
     # feature scaling
     sc_X = StandardScaler()
     X_scaled = sc_X.fit_transform(X)
-
-    # dataset split
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
     
-    # dummy classifier (baseline model)
-    dummy = DummyClassifier(strategy='most_frequent')
-    dummy.fit(X_train, y_train)
-    y_dummy = dummy.predict(X_test)
-    dummy_f1 = f1_score(y_test, y_dummy, average='weighted')
-    print(f"Dummy F1: {dummy_f1:.4f}\n")
-
     '''
     CLASSIFICATION PROBLEM (JOB TITLES)
     '''
+    # dataset split
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
+
     # param grid for hyperparameter tuning
     param_grid = {
         'C': [2**-5, 2**-3, 2**-1, 2, 2**3, 2**5, 2**7],
@@ -173,8 +164,15 @@ def load_and_preprocess_data(file_path):
             best_train_f1 = avg_train_f1
             best_params = {'C': C, 'gamma': gamma}
 
+    # dummy classifier (baseline model)
+    dummy = DummyClassifier(strategy='most_frequent')
+    dummy.fit(X_train, y_train)
+    y_dummy = dummy.predict(X_test)
+    dummy_f1 = f1_score(y_test, y_dummy, average='weighted')
+
     print("\nBest SVM configuration found:")
     print(best_params, "\n")
+    print(f"Dummy Classifier F1: {dummy_f1:.4f}")
     print(f"Train Accuracy: {best_train_acc:.4f}, Train F1: {best_train_f1:.4f}")
     print(f"Test Accuracy: {best_accuracy:.4f}, F1 Score: {best_score:.4f}, Precision: {best_precision:.4f}, Recall: {best_recall:.4f}")
     print(f"Performance Increase over Baseline Model: {((best_score-dummy_f1)/dummy_f1) * 100:.4f}%\n")
@@ -182,12 +180,34 @@ def load_and_preprocess_data(file_path):
     '''
     REGRESSION PROBLEM (TIME TO EMPLOYMENT)
     '''
-    y_reg = df['TimeToEmployment'].values
+    X = df[['PracticumGrade', 'WebDevGrade','DSAGrade', 'FundamentalsProgGrade', 'OOPGrade']] # based on select K-Best
+
+    # feature scaling
+    sc_X_reg = StandardScaler()
+    X_scaled = sc_X_reg.fit_transform(X)
+
+    # use IQR to identify outliers
+    Q1 = df['TimeToEmployment'].quantile(0.25)
+    Q3 = df['TimeToEmployment'].quantile(0.75)
+    IQR = Q3 - Q1
+
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    # mask for non-outliers
+    mask = (df['TimeToEmployment'] >= lower_bound) & (df['TimeToEmployment'] <= upper_bound)
+
+    # apply mask 
+    X_filtered = X_scaled[mask]
+    y_reg = df['TimeToEmployment'].values[mask]
+
+    # dataset split
+    X_train, X_test, y_train, y_test = train_test_split(X_filtered, y_reg, test_size=0.3, random_state=42)
 
     # param grid for hyperparameter tuning
     param_grid_reg = {
-        'C': [0.1, 1, 10],
-        'epsilon': [0.01, 0.1, 0.2]
+        'C': [2**-5, 2**-3, 2**-1, 2, 2**3, 2**5, 2**7],
+        'epsilon': [0.001, 0.01, 0.1, 0.2, 0.5, 1.0]
     }
 
     reg_param_combinations = list(itertools.product(param_grid_reg['C'], param_grid_reg['epsilon']))
@@ -195,31 +215,46 @@ def load_and_preprocess_data(file_path):
     best_reg_score = float('inf') 
     best_reg_params = None
 
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    
     for C, epsilon in reg_param_combinations:
-        loo = LeaveOneOut()
-        mse_scores = []
+        mse_scores, train_mse_scores = [], []
 
-        for train_index, test_index in loo.split(X_scaled):
-            X_train, X_test = X_scaled[train_index], X_scaled[test_index]
-            y_train, y_test = y_reg[train_index], y_reg[test_index]
+        for train_index, test_index in kf.split(X_filtered):
+            X_train_fold, X_test_fold = X_filtered[train_index], X_filtered[test_index]
+            y_train_fold, y_test_fold = y_reg[train_index], y_reg[test_index]
 
             reg_model = SVR(C=C, epsilon=epsilon, kernel='rbf')
-            reg_model.fit(X_train, y_train)
-            y_pred = reg_model.predict(X_test)
+            reg_model.fit(X_train_fold, y_train_fold)
 
-            mse_scores.append(mean_squared_error(y_test, y_pred))
+            y_pred = reg_model.predict(X_test_fold)
+            mse_scores.append(mean_squared_error(y_test_fold, y_pred))  
+
+            y_train_pred = reg_model.predict(X_train_fold)
+            train_mse_scores.append(mean_squared_error(y_train_fold, y_train_pred))
 
         avg_mse = np.mean(mse_scores)
+        avg_train_mse = np.mean(train_mse_scores)
         print(f"Reg Params: C={C}, epsilon={epsilon} --> Avg MSE: {avg_mse:.4f}")
 
         if avg_mse < best_reg_score:
             best_reg_score = avg_mse
+            best_train_reg_score = avg_train_mse
             best_reg_params = {'C': C, 'epsilon': epsilon}
 
+    # dummy regressor (baseline model)
+    dummy_model = DummyRegressor(strategy='mean')
+    dummy_model.fit(X_train, y_train)
+    y_pred_dummy = dummy_model.predict(X_test)
+    mse_dummy_all = mean_squared_error(y_test, y_pred_dummy)
+
     print("\nBest SVR configuration found:")
-    print(best_reg_params)
-    print(f"Best LOO-CV MSE: {best_reg_score:.4f}")
-    
+    print(best_reg_params, "\n")
+    print(f"Dummy Regressor MSE: {mse_dummy_all:.4f}")
+    print(f"Train MSE: {best_train_reg_score:.4f}")
+    print(f"Test MSE: {best_reg_score:.4f}")
+    print(f"Performance Increase over Baseline Model: {((best_reg_score-mse_dummy_all)/mse_dummy_all) * 100:.4f}%\n")
+
     '''
     export models
     '''
@@ -227,12 +262,13 @@ def load_and_preprocess_data(file_path):
     final_svm_model.fit(X_scaled, y_encoded)
 
     final_svr_model = SVR(C=best_reg_params['C'], epsilon=best_reg_params['epsilon'], kernel='rbf')
-    final_svr_model.fit(X_scaled, y_reg)
+    final_svr_model.fit(X_filtered, y_reg)
 
     # save to .pkl
     joblib.dump(final_svr_model, 'svr_model.pkl')
     joblib.dump(final_svm_model, 'svm_model.pkl')
     joblib.dump(sc_X, 'scaler.pkl')
+    joblib.dump(sc_X_reg, 'scaler_reg.pkl')
     joblib.dump(label_encoder, 'label_encoder.pkl')
 
 def main():

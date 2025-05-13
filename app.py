@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 svr_model = joblib.load('svr_model.pkl')
 svm_model = joblib.load('svm_model.pkl')
 scaler = joblib.load('scaler.pkl')
+scaler_reg = joblib.load('scaler_reg.pkl')
 label_encoder = joblib.load('label_encoder.pkl')
 
 app = FastAPI()
@@ -33,7 +34,8 @@ class PredictionRequest(BaseModel):
  
 @app.post('/predict')
 def predict(request: PredictionRequest):
-    model_input = np.array([
+    # classification
+    model_input_class = np.array([
         request.WebDevGrade,
         request.FundamentalsProgGrade, 
         request.FoundationsCSGrade,
@@ -41,11 +43,21 @@ def predict(request: PredictionRequest):
         request.LatinHonors
     ]).reshape(1, -1)
 
-    features_scaled = scaler.transform(model_input)
-    
-    time_to_employment = svr_model.predict(features_scaled)[0]
-    
-    job_title_encoded = svm_model.predict(features_scaled)[0]
+    features_scaled_class = scaler.transform(model_input_class)
+    job_title_encoded = svm_model.predict(features_scaled_class)[0]
+    job_title = label_encoder.inverse_transform([job_title_encoded])[0]
+
+    # regression
+    model_input_reg = np.array([
+        request.PracticumGrade,
+        request.WebDevGrade, 
+        request.DSAGrade,
+        request.FundamentalsProgGrade,
+        request.OOPGrade
+    ]).reshape(1, -1)
+
+    features_scaled_reg = scaler_reg.transform(model_input_reg)
+    time_to_employment = svr_model.predict(features_scaled_reg)[0]
     job_title = label_encoder.inverse_transform([job_title_encoded])[0]
     
     return {
