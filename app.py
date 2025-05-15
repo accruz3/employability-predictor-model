@@ -48,15 +48,21 @@ def predict(request: PredictionRequest):
     job_title = label_encoder.inverse_transform([job_title_encoded])[0]
 
     # regression
-    model_input_reg = np.array([
-        request.PracticumGrade,
+    academic_grades = np.array([
         request.WebDevGrade, 
         request.DSAGrade,
         request.FundamentalsProgGrade,
         request.OOPGrade,
         request.FoundationsCSGrade,
         request.NetworkingGrade, 
-        request.NumericComputationGrade,
+        request.NumericComputationGrade
+    ])
+
+    academic_grade = np.mean(academic_grades)
+
+    model_input_reg = np.array([
+        academic_grade,
+        request.PracticumGrade,
         request.ExtracurricularsLevel,
         request.LatinHonors
     ]).reshape(1, -1)

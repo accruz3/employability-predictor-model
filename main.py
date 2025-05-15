@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC, SVR
 from sklearn.model_selection import KFold, LeaveOneOut, StratifiedKFold, train_test_split
 from sklearn.model_selection import train_test_split, StratifiedKFold, RepeatedStratifiedKFold
-from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, mean_squared_error
+from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, mean_absolute_error, precision_score, recall_score, f1_score, mean_squared_error
 from sklearn.metrics import confusion_matrix, r2_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import LabelEncoder
@@ -22,6 +22,7 @@ from sklearn.feature_selection import RFE, SelectKBest, f_classif, f_regression
 from xgboost import XGBClassifier
 from collections import Counter
 from imblearn.combine import SMOTETomek, SMOTEENN
+import seaborn as sns
 
 def load_and_preprocess_data(file_path):
     df = pd.read_excel(file_path, engine='openpyxl')
@@ -65,7 +66,7 @@ def load_and_preprocess_data(file_path):
     df['NumericComputationGrade'] = imputer.fit_transform(df[['NumericComputationGrade']]) 
 
     # feature transformations
-    df['AcademicGrade'] = df['WebDevGrade'] + df['DSAGrade'] + df['FundamentalsProgGrade'] + df['OOPGrade'] + df['FoundationsCSGrade'] + df['NetworkingGrade'] + df['NumericComputationGrade']
+    df['AcademicGrade'] = df[['WebDevGrade', 'DSAGrade', 'FundamentalsProgGrade', 'OOPGrade', 'FoundationsCSGrade', 'NetworkingGrade', 'NumericComputationGrade']].mean(axis=1)
     df['ExternalMetrics'] = df[['PracticumGrade', 'ExtracurricularsLevel', 'LatinHonors']].mean(axis=1)
     df['OverallGrade'] = df[['PracticumGrade', 'WebDevGrade', 'DSAGrade', 'FundamentalsProgGrade', 'OOPGrade', 'FoundationsCSGrade', 'NetworkingGrade', 'NumericComputationGrade']].mean(axis=1)
     df['FundamentalsGrade'] = df[['DSAGrade', 'FundamentalsProgGrade', 'OOPGrade', 'FoundationsCSGrade']].mean(axis=1)
@@ -170,17 +171,26 @@ def load_and_preprocess_data(file_path):
     y_dummy = dummy.predict(X_test)
     dummy_f1 = f1_score(y_test, y_dummy, average='weighted')
 
+    final_svm_model = OneVsRestClassifier(SVC(C=best_params['C'], gamma=best_params['gamma'], kernel='rbf', class_weight='balanced'))
+    final_svm_model.fit(X_train, y_train)
+    y_pred_final = final_svm_model.predict(X_test)
+    f1_final = f1_score(y_test, y_pred_final, average='weighted')
+    accuracy_final = accuracy_score(y_test, y_pred_final)
+    precision_final = precision_score(y_test, y_pred_final, average='weighted', zero_division=0)
+    recall_final = recall_score(y_test, y_pred_final, average='weighted', zero_division=0)
+
     print("\nBest SVM configuration found:")
     print(best_params, "\n")
     print(f"Dummy Classifier F1: {dummy_f1:.4f}")
     print(f"Train Accuracy: {best_train_acc:.4f}, Train F1: {best_train_f1:.4f}")
-    print(f"Test Accuracy: {best_accuracy:.4f}, F1 Score: {best_score:.4f}, Precision: {best_precision:.4f}, Recall: {best_recall:.4f}")
-    print(f"Performance Increase over Baseline Model: {((best_score-dummy_f1)/dummy_f1) * 100:.4f}%\n")
+    print(f"Test Accuracy: {best_accuracy:.4f}, Test F1: {best_score:.4f}")
+    print(f"Final SVM Model F1 Score: {f1_final:.4f}, Accuracy: {accuracy_final:.4f}, Precision: {precision_final:.4f}, Recall: {recall_final:.4f}")
+    print(f"Performance Increase over Baseline Model: {((f1_final-dummy_f1)/dummy_f1) * 100:.4f}%\n")
 
     '''
     REGRESSION PROBLEM (TIME TO EMPLOYMENT)
     '''
-    X = df[['PracticumGrade','WebDevGrade','DSAGrade','FundamentalsProgGrade','OOPGrade','FoundationsCSGrade','NetworkingGrade','NumericComputationGrade','ExtracurricularsLevel','LatinHonors']]
+    X = df[['AcademicGrade', 'PracticumGrade', 'ExtracurricularsLevel', 'LatinHonors']]
 
     # feature scaling
     sc_X_reg = StandardScaler()
@@ -240,12 +250,28 @@ def load_and_preprocess_data(file_path):
     y_pred_dummy = dummy_model.predict(X_test)
     mse_dummy_all = mean_squared_error(y_test, y_pred_dummy)
 
+    final_svr_model = SVR(C=best_reg_params['C'], epsilon=best_reg_params['epsilon'], kernel='rbf')
+    final_svr_model.fit(X_train, y_train)
+    y_pred_final = final_svr_model.predict(X_test)
+    mse_final = mean_squared_error(y_test, y_pred_final)
+    mae_final = mean_absolute_error(y_test, y_pred_final)
+    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred_final))
+
     print("\nBest SVR configuration found:")
     print(best_reg_params, "\n")
     print(f"Dummy Regressor MSE: {mse_dummy_all:.4f}")
     print(f"Train MSE: {best_train_reg_score:.4f}")
     print(f"Test MSE: {best_reg_score:.4f}")
-    print(f"Performance Increase over Baseline Model: {((mse_dummy_all-best_reg_score)/mse_dummy_all) * 100:.4f}%\n")
+    print(f"Final SVR Model MSE: {mse_final:.4f}, MAE: {mae_final:.4f}, RMSE: {rmse_final:.4f}")
+    print(f"Performance Increase over Baseline Model: {((mse_dummy_all-mse_final)/mse_dummy_all) * 100:.4f}%\n")
+    
+    plt.scatter(y_test, y_pred_final, alpha=0.6)
+    plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], 'r--') 
+    plt.xlabel('Actual Values')
+    plt.ylabel('Predicted Values')
+    plt.title('Predicted vs Actual')
+    plt.grid(True)
+    plt.show()
 
     '''
     export models
